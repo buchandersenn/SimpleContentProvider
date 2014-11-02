@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SimpleContentProvider Demo</string>
+    <string name="activity_owners_title">Owners</string>
+    <string name="activity_pets_title">Pets</string>
+    <string name="activity_overview_title">Overview</string>
+    <string name="action_add_item">Add</string>
+    <string name="action_overview">Overview</string>
+
+    <string name="context_menu_delete_title">Delete</string>
+
+    <string name="add_owner_name_hint">name</string>
+    <string name="add_owner_address_hint">address</string>
+    <string name="add_pet_owner_hint">owner id</string>
+    <string name="add_pet_name_hint">name</string>
+    <string name="add_pet_type_hint">dog, cat etc.</string>
+    <string name="add_pet_age_hint">age</string>
+</resources>

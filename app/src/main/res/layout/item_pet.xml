@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<RelativeLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="?android:attr/listPreferredItemHeight"
+    android:paddingStart="?android:attr/listPreferredItemPaddingStart"
+    android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
+    android:paddingLeft="8dp"
+    android:paddingRight="8dp"
+    android:gravity="center_vertical">
+
+    <TextView
+        android:id="@+id/pet_name"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentTop="true"
+        android:textAllCaps="true"
+        tools:text="pet_name"
+        style="?android:attr/textAppearanceListItem"/>
+    <TextView
+        android:id="@+id/pet_type_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentLeft="true"
+        android:layout_below="@id/pet_name"
+        android:text="Type:"
+        style="?android:attr/textAppearanceListItemSmall"
+        android:textColor="?android:attr/textColorSecondaryInverse"/>
+    <TextView
+        android:id="@+id/pet_type"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="8dp"
+        android:layout_toRightOf="@id/pet_type_label"
+        android:layout_below="@id/pet_name"
+        tools:text="pet_type"
+        style="?android:attr/textAppearanceListItemSmall"/>
+    <TextView
+        android:id="@+id/pet_age_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="4dp"
+        android:layout_toRightOf="@id/pet_type"
+        android:layout_below="@id/pet_name"
+        android:text=", Age:"
+        style="?android:attr/textAppearanceListItemSmall"
+        android:textColor="?android:attr/textColorSecondaryInverse"/>
+    <TextView
+        android:id="@+id/pet_age"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="8dp"
+        android:layout_toRightOf="@id/pet_age_label"
+        android:layout_below="@id/pet_name"
+        tools:text="pet_age"
+        style="?android:attr/textAppearanceListItemSmall"/>
+</RelativeLayout>
