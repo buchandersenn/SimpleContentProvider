@@ -247,9 +247,9 @@ The default implementation just drops and re-create all the tables.
 
 #Developed By
 
-Nicolai Buch-Andersen
-Google+ <https://google.com/+NicolaiBuchAndersen>
-Email: <nicolai.buch.andersen@gmail.com>
+Nicolai Buch-Andersen<br/>
+Google+ <https://google.com/+NicolaiBuchAndersen><br/>
+Email: <nicolai.buch.andersen@gmail.com><br/>
 
 #License
 
