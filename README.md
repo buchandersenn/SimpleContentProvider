@@ -11,10 +11,17 @@ repository by invoking
     $ ./gradlew clean build publishToMavenLocal
 
 
-and then add the library as a dependency in your 'build.gradle' file:
+and then add Maven Local as well as the library itself to your 'build.gradle' file:
+
+    repositories {
+        mavenLocal();
+        mavenCentral();
+    }
+
+    ...
 
     dependencies {
-        compile 'dk.simplecontentprovider:simplecontentprovider:1.0.+'
+        compile 'dk.simplecontentprovider:simplecontentprovider:1.0.0'
     }
 
 Alternatively, you can just to copy the three classes SimpleContentProvider, SimpleDatabaseHelper and

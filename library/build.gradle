@@ -17,22 +17,19 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
 
+        applicationId 'dk.simplecontentprovider'
         versionCode 1
         versionName '1.0.0'
     }
 }
 
-//android.libraryVariants.all { variant ->
-//    def file = variant.outputFile
-//    def fileName = file.name.replace("library", "simplecontentprovider")
-//    variant.outputFile = new File(file.parent, fileName)
-//}
-
-version '1.0'
-group 'dk.simplecontentprovider'
 publishing {
     publications {
-        maven(MavenPublication) {
+        lib(MavenPublication) {
+            groupId android.defaultConfig.applicationId
+            artifactId 'simplecontentprovider'
+            version android.defaultConfig.versionName
+
             artifact file('build/outputs/aar/library-release.aar')
         }
     }
