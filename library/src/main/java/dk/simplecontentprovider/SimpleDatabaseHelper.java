@@ -1,49 +1,46 @@
 package dk.simplecontentprovider;
 
-import android.content.Context;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
-
-import java.util.List;
+import android.os.Build;
 
 public class SimpleDatabaseHelper extends SQLiteOpenHelper {
-    private final List<SimpleContentProvider.Entity> mEntities;
+    private final SimpleContentProvider simpleContentProvider;
 
-    public SimpleDatabaseHelper(Context context, String databaseName, int databaseVersion, List<SimpleContentProvider.Entity> entities) {
-        super(context, databaseName, null, databaseVersion);
-        this.mEntities = entities;
+    public SimpleDatabaseHelper(SimpleContentProvider simpleContentProvider, String databaseName, int databaseVersion) {
+        super(simpleContentProvider.getContext(), databaseName, null, databaseVersion);
+        this.simpleContentProvider = simpleContentProvider;
     }
 
     @Override
     public void onCreate(SQLiteDatabase db) {
-        for (SimpleContentProvider.Entity entity : mEntities) {
-            String entitySql = null;
-
-            for (SimpleContentProvider.EntityColumn column : entity.columns) {
-                if (entitySql == null) {
-                    entitySql = column.name + " " + column.definition;
-                } else {
-                    entitySql += "," + column.name + " " + column.definition;
-                }
-            }
-
-            for (String constraint : entity.constraints) {
-                if (entitySql == null) {
-                    entitySql = constraint;
-                } else {
-                    entitySql += "," + constraint;
-                }
-            }
-
-            db.execSQL("CREATE TABLE " + entity.name + " (" + entitySql + ")");
-        }
+        simpleContentProvider.onCreateDatabase(db);
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        for (SimpleContentProvider.Entity entity : mEntities) {
-            db.execSQL("DROP TABLE IF EXISTS " + entity.name);
+        simpleContentProvider.onUpgradeDatabase(db, oldVersion, newVersion);
+    }
+
+    public static class ForeignKeyConstraintDatabaseHelper extends SimpleDatabaseHelper {
+        public ForeignKeyConstraintDatabaseHelper(SimpleContentProvider simpleContentProvider, String databaseName, int databaseVersion) {
+            super(simpleContentProvider, databaseName, databaseVersion);
         }
-        onCreate(db);
+
+        public void onConfigure(SQLiteDatabase db) {
+            super.onConfigure(db);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+                db.setForeignKeyConstraintsEnabled(true);
+            }
+        }
+
+        @Override
+        public void onOpen(SQLiteDatabase db) {
+            super.onOpen(db);
+            if (!db.isReadOnly() && Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN) {
+                // Enable foreign key constraints
+                db.execSQL("PRAGMA foreign_keys=ON;");
+            }
+        }
     }
 }

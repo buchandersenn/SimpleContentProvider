@@ -1,15 +1,8 @@
 package dk.simplecontentprovider.demo.provider;
 
-import android.annotation.TargetApi;
-import android.content.Context;
-import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteQueryBuilder;
-import android.os.Build;
-
-import java.util.List;
 
 import dk.simplecontentprovider.SimpleContentProvider;
-import dk.simplecontentprovider.SimpleDatabaseHelper;
 
 public class DemoContentProvider extends SimpleContentProvider {
     public DemoContentProvider() {
@@ -23,6 +16,14 @@ public class DemoContentProvider extends SimpleContentProvider {
         // Set database name and version...
         setDatabaseName("DemoContentProvider.db");
         setDatabaseVersion(1);
+
+        // Enable foreign key constraints. By default the database will not
+        // enforce foreign key constraints and usually this not necessary,
+        // but this demo sets up a number of such constraints for the purpose
+        // of illustrating how they might be used. If constraints are enabled
+        // by calling this method then the SimpleContentProvider will take care
+        // of enabling the constraints in the database...
+        setForeignKeyConstraintsEnabled(true);
 
         // Add entities from the contract...
         addEntity(DemoContract.Owners.TABLE_NAME)
@@ -46,15 +47,6 @@ public class DemoContentProvider extends SimpleContentProvider {
         addView(DemoContract.OwnersAndPetsView.VIEW_NAME, createQueryBuilderForOwnersAndPets())
             .onEntity(DemoContract.Owners.TABLE_NAME)
             .onEntity(DemoContract.Pets.TABLE_NAME);
-
-        // Use a custom SQLiteOpenHelper to enable foreign key constraints.
-        // You could use a similar technique to provide onUpgrade behaviour
-        // to the database, if necessary...
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN) {
-            setDatabaseHelper(new LegacyDatabaseHelper(getContext(), mDatabaseName, mDatabaseVersion, mEntities));
-        } else {
-            setDatabaseHelper(new DemoDatabaseHelper(getContext(), mDatabaseName, mDatabaseVersion, mEntities));
-        }
     }
 
     private SQLiteQueryBuilder createQueryBuilderForOwnersAndPets() {
@@ -73,32 +65,5 @@ public class DemoContentProvider extends SimpleContentProvider {
         builder.setTables(table);
 
         return builder;
-    }
-
-    public static class LegacyDatabaseHelper extends SimpleDatabaseHelper {
-        public LegacyDatabaseHelper(Context context, String databaseName, int databaseVersion, List<Entity> entities) {
-            super(context, databaseName, databaseVersion, entities);
-        }
-
-        @Override
-        public void onOpen(SQLiteDatabase db) {
-            super.onOpen(db);
-            if (!db.isReadOnly()) {
-                // Enable foreign key constraints
-                db.execSQL("PRAGMA foreign_keys=ON;");
-            }
-        }
-    }
-
-    @TargetApi(Build.VERSION_CODES.JELLY_BEAN)
-    public static class DemoDatabaseHelper extends SimpleDatabaseHelper {
-        public DemoDatabaseHelper(Context context, String databaseName, int databaseVersion, List<Entity> entities) {
-            super(context, databaseName, databaseVersion, entities);
-        }
-
-        @Override
-        public void onConfigure(SQLiteDatabase db) {
-            db.setForeignKeyConstraintsEnabled(true);
-        }
     }
 }

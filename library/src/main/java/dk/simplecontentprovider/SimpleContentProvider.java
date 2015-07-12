@@ -15,7 +15,6 @@ import android.database.sqlite.SQLiteQueryBuilder;
 import android.net.Uri;
 import android.provider.BaseColumns;
 import android.support.annotation.NonNull;
-import android.util.Log;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -31,20 +30,46 @@ import java.util.Set;
  * Some of the logic for the applyBatch operation is loosely based on com.android.common.content.SQLiteContentProvider.
  */
 public abstract class SimpleContentProvider extends ContentProvider {
+    /**
+     * Append the limit parameter to the query Uri to add a limit to the query. Example:
+     *
+     * Uri uri = CONTENT_URI.buildUpon()
+     *    .appendQueryParameter(SimpleContentProvider.QUERY_PARAMETER_LIMIT, String.valueOf(10))
+     *    .build();
+     */
+    public static final String QUERY_PARAMETER_LIMIT = "limit";
+
+    /**
+     * Append the offset parameter to the query Uri to add an offset to the limit of the query. Example:
+     *
+     * Uri uri = CONTENT_URI.buildUpon()
+     *    .appendQueryParameter(SimpleContentProvider.QUERY_PARAMETER_LIMIT, String.valueOf(10))
+     *    .appendQueryParameter(SimpleContentProvider.QUERY_PARAMETER_OFFSET, String.valueOf(2))
+     *    .build();
+     */
+    public static final String QUERY_PARAMETER_OFFSET = "offset";
+
+    /**
+     * Use the given conflict algorithm for resolving conflict when inserting or updating.
+     * See SQLiteDatabase.insertWithOnConflict() and SQLiteDatabase.updateWithOnConflict().
+     */
+    public static final String PARAMETER_CONFLICT_ALGORITHM = "conflictAlgorithm";
+
     protected String mAuthority;
 
     protected String mDatabaseName;
     protected int mDatabaseVersion = 1;
+    protected boolean mForeignKeyConstraintsEnabled;
 
-    protected List<Entity> mEntities = new ArrayList<Entity>();
-    protected List<EntityView> mViews = new ArrayList<EntityView>();
-    protected Map<String, Set<String>> mEntityToViewsMap = new HashMap<String, Set<String>>();
+    protected List<Entity> mEntities = new ArrayList<>();
+    protected List<EntityView> mViews = new ArrayList<>();
+    protected Map<String, Set<String>> mEntityToViewsMap = new HashMap<>();
 
     protected SimpleUriMatcher mMatcher;
     protected SQLiteOpenHelper mDatabaseHelper;
 
-    private final ThreadLocal<Boolean> mApplyingBatchOperations = new ThreadLocal<Boolean>();
-    private final Set<Uri> mChangedUris = new HashSet<Uri>();
+    private final ThreadLocal<Boolean> mApplyingBatchOperations = new ThreadLocal<>();
+    private final Set<Uri> mChangedUris = new HashSet<>();
 
     @Override
     public boolean onCreate() {
@@ -73,7 +98,11 @@ public abstract class SimpleContentProvider extends ContentProvider {
         }
 
         if (mDatabaseHelper == null) {
-            mDatabaseHelper = new SimpleDatabaseHelper(getContext(), mDatabaseName, mDatabaseVersion, mEntities);
+            if (mForeignKeyConstraintsEnabled) {
+                mDatabaseHelper = new SimpleDatabaseHelper.ForeignKeyConstraintDatabaseHelper(this, mDatabaseName, mDatabaseVersion);
+            } else {
+                mDatabaseHelper = new SimpleDatabaseHelper(this, mDatabaseName, mDatabaseVersion);
+            }
         }
 
         return true;
@@ -111,6 +140,17 @@ public abstract class SimpleContentProvider extends ContentProvider {
             throw new IllegalArgumentException("Unknown Uri: " + uri);
         }
 
+        // Parse the limit query parameters...
+        String limit = null;
+        String limitQueryParam = uri.getQueryParameter(QUERY_PARAMETER_LIMIT);
+        String offsetQueryParam = uri.getQueryParameter(QUERY_PARAMETER_OFFSET);
+        if (limitQueryParam != null && !limitQueryParam.isEmpty()) {
+            limit = limitQueryParam;
+            if (offsetQueryParam != null && !offsetQueryParam.isEmpty()) {
+                limit = offsetQueryParam + "," + limitQueryParam;
+            }
+        }
+
         // Query an entity...
         if (match.entity != null) {
             SQLiteDatabase db = mDatabaseHelper.getReadableDatabase();
@@ -123,9 +163,9 @@ public abstract class SimpleContentProvider extends ContentProvider {
                 String[] whereArgs = new String[]{"" + id};
                 selection = DatabaseUtils.concatenateWhere(selection, where);
                 selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, whereArgs);
-                cursor = db.query(table, projection, selection, selectionArgs, null, null, sortOrder);
+                cursor = db.query(table, projection, selection, selectionArgs, null, null, sortOrder, limit);
             } else {
-                cursor = db.query(table, projection, selection, selectionArgs, null, null, sortOrder);
+                cursor = db.query(table, projection, selection, selectionArgs, null, null, sortOrder, limit);
             }
         }
 
@@ -141,9 +181,9 @@ public abstract class SimpleContentProvider extends ContentProvider {
                 String[] whereArgs = new String[]{"" + id};
                 selection = DatabaseUtils.concatenateWhere(selection, where);
                 selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, whereArgs);
-                cursor = builder.query(db, projection, selection, selectionArgs, null, null, sortOrder);
+                cursor = builder.query(db, projection, selection, selectionArgs, null, null, sortOrder, limit);
             } else {
-                cursor = builder.query(db, projection, selection, selectionArgs, null, null, sortOrder);
+                cursor = builder.query(db, projection, selection, selectionArgs, null, null, sortOrder, limit);
             }
         }
 
@@ -170,13 +210,31 @@ public abstract class SimpleContentProvider extends ContentProvider {
             throw new IllegalArgumentException("Cannot use insert with an item Uri: " + uri);
         }
 
+        // Parse the conflict algorithm parameter. If no conflict algorithm
+        // was specified then use the "normal" insert method,
+        // which handles SQL exceptions by logging them...
+        Integer conflictAlgorithm = match.entity.defaultConflictAlgorithm;
+        String conflictAlgorithmParam = uri.getQueryParameter(PARAMETER_CONFLICT_ALGORITHM);
+        if (conflictAlgorithmParam != null && !conflictAlgorithmParam.isEmpty()) {
+            try {
+                conflictAlgorithm = Integer.parseInt(conflictAlgorithmParam);
+            } catch (NumberFormatException e) {
+                // Ignore exception
+            }
+        }
+
         SQLiteDatabase db = mDatabaseHelper.getWritableDatabase();
         String table = match.entity.name;
         String nullColumnHack = match.entity.nullColumnHack;
-        long insertedId = db.insert(table, nullColumnHack, values);
+        long insertedId = (conflictAlgorithm == null) ?
+                db.insert(table, nullColumnHack, values) :
+                db.insertWithOnConflict(table, nullColumnHack, values, conflictAlgorithm);
 
         Uri insertedUri = null;
         if (insertedId != -1) {
+            // Clear the query parameters before using the uri to build
+            // the return value and to notify listeners...
+            uri = uri.buildUpon().clearQuery().build();
             insertedUri = ContentUris.withAppendedId(uri, insertedId);
             postNotifyChangedUri(uri);
             postNotifyChangedViews(match.entity.name);
@@ -198,6 +256,19 @@ public abstract class SimpleContentProvider extends ContentProvider {
             throw new IllegalArgumentException("Cannot use update with a view Uri: " + uri);
         }
 
+        // Parse the conflict algorithm parameter. If no conflict algorithm
+        // was specified then use the "normal" update method,
+        // which handles SQL exceptions by logging them...
+        Integer conflictAlgorithm = match.entity.defaultConflictAlgorithm;
+        String conflictAlgorithmParam = uri.getQueryParameter(PARAMETER_CONFLICT_ALGORITHM);
+        if (conflictAlgorithmParam != null && !conflictAlgorithmParam.isEmpty()) {
+            try {
+                conflictAlgorithm = Integer.parseInt(conflictAlgorithmParam);
+            } catch (NumberFormatException e) {
+                // Ignore exception. Use default value.
+            }
+        }
+
         SQLiteDatabase db = mDatabaseHelper.getReadableDatabase();
         String table = match.entity.name;
         String idColumn = match.entity.idColumn;
@@ -209,12 +280,18 @@ public abstract class SimpleContentProvider extends ContentProvider {
             String[] whereArgs = new String[]{"" + id};
             selection = DatabaseUtils.concatenateWhere(selection, where);
             selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, whereArgs);
-            rowCount = db.update(table, values, selection, selectionArgs);
+            rowCount = (conflictAlgorithm == null) ?
+                    db.update(table, values, selection, selectionArgs) :
+                    db.updateWithOnConflict(table, values, selection, selectionArgs, conflictAlgorithm);
         } else {
-            rowCount = db.update(table, values, selection, selectionArgs);
+            rowCount = (conflictAlgorithm == null) ?
+                    db.update(table, values, selection, selectionArgs) :
+                    db.updateWithOnConflict(table, values, selection, selectionArgs, conflictAlgorithm);
         }
 
         if (rowCount > 0) {
+            // Clear the query parameters before using the uri to notify listeners...
+            uri = uri.buildUpon().clearQuery().build();
             postNotifyChangedUri(uri);
             postNotifyChangedViews(match.entity.name);
             notifyChangedUris();
@@ -255,6 +332,8 @@ public abstract class SimpleContentProvider extends ContentProvider {
         // but the delete method will not return a row count. Yet we still
         // want to notify listeners...
         if (selection == null || rowCount > 0) {
+            // Clear the query parameters before using the uri to notify listeners...
+            uri = uri.buildUpon().clearQuery().build();
             postNotifyChangedUri(uri);
             postNotifyChangedViews(match.entity.name);
             notifyChangedUris();
@@ -289,6 +368,19 @@ public abstract class SimpleContentProvider extends ContentProvider {
             throw new IllegalArgumentException("Cannot use insert with an item Uri: " + uri);
         }
 
+        // Parse the conflict algorithm parameter. If no conflict algorithm
+        // was specified then use the "normal" insert method,
+        // which handles SQL exceptions by logging them...
+        Integer conflictAlgorithm = match.entity.defaultConflictAlgorithm;
+        String conflictAlgorithmParam = uri.getQueryParameter(PARAMETER_CONFLICT_ALGORITHM);
+        if (conflictAlgorithmParam != null && !conflictAlgorithmParam.isEmpty()) {
+            try {
+                conflictAlgorithm = Integer.parseInt(conflictAlgorithmParam);
+            } catch (NumberFormatException e) {
+                // Ignore exception
+            }
+        }
+
         String table = match.entity.name;
         String nullColumnHack = match.entity.nullColumnHack;
         SQLiteDatabase db = mDatabaseHelper.getWritableDatabase();
@@ -297,7 +389,9 @@ public abstract class SimpleContentProvider extends ContentProvider {
         try {
             db.beginTransaction();
             for (ContentValues value : values) {
-                long id = db.insert(table, nullColumnHack, value);
+                long id = (conflictAlgorithm == null) ?
+                        db.insert(table, nullColumnHack, value) :
+                        db.insertWithOnConflict(table, nullColumnHack, value, conflictAlgorithm);
                 if (id != -1) {
                     rows += 1;
                 }
@@ -308,6 +402,8 @@ public abstract class SimpleContentProvider extends ContentProvider {
         }
 
         if (rows > 0) {
+            // Clear the query parameters before using the uri to notify listeners...
+            uri = uri.buildUpon().clearQuery().build();
             postNotifyChangedUri(uri);
             postNotifyChangedViews(match.entity.name);
             notifyChangedUris();
@@ -355,7 +451,7 @@ public abstract class SimpleContentProvider extends ContentProvider {
         }
     }
 
-    protected void postNotifyChangedViews(String entityName) {
+    private void postNotifyChangedViews(String entityName) {
         Set<String> viewNames = mEntityToViewsMap.get(entityName);
         if (viewNames == null) {
             return;
@@ -375,7 +471,7 @@ public abstract class SimpleContentProvider extends ContentProvider {
 
         Set<Uri> changed;
         synchronized (mChangedUris) {
-            changed = new HashSet<Uri>(mChangedUris);
+            changed = new HashSet<>(mChangedUris);
             mChangedUris.clear();
         }
 
@@ -383,6 +479,53 @@ public abstract class SimpleContentProvider extends ContentProvider {
         for (Uri uri : changed) {
             resolver.notifyChange(uri, null);
         }
+    }
+
+    /**
+     * Creates the database tables. This method is called by the default database helper, SimpleDatabaseHelper.
+     * Override the method to provide an alternative algorithm for creating the tables,
+     * or call setDatabaseHelper(helper) to substitute a completely custom database helper instead.
+     * @param db the SQL database
+     */
+    protected void onCreateDatabase(SQLiteDatabase db) {
+        for (SimpleContentProvider.Entity entity : mEntities) {
+            String entitySql = null;
+
+            for (SimpleContentProvider.EntityColumn column : entity.columns) {
+                if (entitySql == null) {
+                    entitySql = column.name + " " + column.definition;
+                } else {
+                    entitySql += "," + column.name + " " + column.definition;
+                }
+            }
+
+            for (String constraint : entity.constraints) {
+                if (entitySql == null) {
+                    entitySql = constraint;
+                } else {
+                    entitySql += "," + constraint;
+                }
+            }
+
+            db.execSQL("CREATE TABLE " + entity.name + " (" + entitySql + ")");
+        }
+    }
+
+    /**
+     * Upgrades the database by dropping existing tables and re-creating the new tables.
+     * This method is called by the default database helper, SimpleDatabaseHelper.
+     * Override the method to provide an alternative algorithm for upgrading the database tables,
+     * or call setDatabaseHelper(helper) to substitute a completely custom database helper instead.
+     * @param db the SQL database
+     * @param oldVersion the database version of the existing database
+     * @param newVersion the database version to upgrade to
+     */
+    @SuppressWarnings("UnusedParameters")
+    protected void onUpgradeDatabase(SQLiteDatabase db, int oldVersion, int newVersion) {
+        for (SimpleContentProvider.Entity entity : mEntities) {
+            db.execSQL("DROP TABLE IF EXISTS " + entity.name);
+        }
+        onCreateDatabase(db);
     }
 
     /**
@@ -447,6 +590,16 @@ public abstract class SimpleContentProvider extends ContentProvider {
     }
 
     /**
+     * Sets whether foreign key constraints should be enabled for the database.
+     * By default, foreign key constraints are not enforced by the database.
+     *
+     * @param foreignKeyConstraintsEnabled True to enable foreign key constraints, false to disable them.
+     */
+    protected void setForeignKeyConstraintsEnabled(boolean foreignKeyConstraintsEnabled) {
+        this.mForeignKeyConstraintsEnabled = foreignKeyConstraintsEnabled;
+    }
+
+    /**
      * Optionally set a custom database helper. If no custom helper
      * is specified then the default SimpleDatabaseHelper
      * implementation is used.
@@ -480,11 +633,11 @@ public abstract class SimpleContentProvider extends ContentProvider {
     }
 
     protected Entity addEntity(String name) {
-        return addEntity(name, BaseColumns._ID, null);
+        return addEntity(name, BaseColumns._ID, null, null);
     }
 
-    protected Entity addEntity(String name, String idColumn, String nullColumnHack) {
-        Entity newEntity = new Entity(name, idColumn, nullColumnHack);
+    protected Entity addEntity(String name, String idColumn, String nullColumnHack, Integer defaultConflictAlgorithm) {
+        Entity newEntity = new Entity(name, idColumn, nullColumnHack, defaultConflictAlgorithm);
         mEntities.add(newEntity);
         return newEntity;
     }
@@ -500,18 +653,20 @@ public abstract class SimpleContentProvider extends ContentProvider {
     }
 
     protected static class Entity {
-        protected final String name;
-        protected final String idColumn;
-        protected final String nullColumnHack;
-        protected final List<EntityColumn> columns;
-        protected final List<String> constraints;
+        public final String name;
+        public final String idColumn;
+        public final String nullColumnHack;
+        public final List<EntityColumn> columns;
+        public final List<String> constraints;
+        public Integer defaultConflictAlgorithm;
 
-        public Entity(String name, String idColumn, String nullColumnHack) {
+        public Entity(String name, String idColumn, String nullColumnHack, Integer defaultConflictAlgorithm) {
             this.name = name;
             this.idColumn = idColumn;
             this.nullColumnHack = nullColumnHack;
-            this.columns = new ArrayList<EntityColumn>();
-            this.constraints = new ArrayList<String>();
+            this.columns = new ArrayList<>();
+            this.constraints = new ArrayList<>();
+            this.defaultConflictAlgorithm = defaultConflictAlgorithm;
         }
 
         // TODO : JavaDoc - explain about syntax, incl. row constraint
@@ -525,11 +680,17 @@ public abstract class SimpleContentProvider extends ContentProvider {
             constraints.add(sql);
             return this;
         }
+
+        @SuppressWarnings("UnusedDeclaration")
+        public Entity setDefaultConflictAlgorithm(int defaultConflictAlgorithm) {
+            this.defaultConflictAlgorithm = defaultConflictAlgorithm;
+            return this;
+        }
     }
 
     protected static class EntityColumn {
-        protected final String name;
-        protected final String definition;
+        public final String name;
+        public final String definition;
 
         public EntityColumn(String name, String definition) {
             this.name = name;
@@ -538,9 +699,9 @@ public abstract class SimpleContentProvider extends ContentProvider {
     }
 
     protected class EntityView {
-        protected final String name;
-        protected final String idColumn;
-        protected final SQLiteQueryBuilder queryBuilder;
+        public final String name;
+        public final String idColumn;
+        public final SQLiteQueryBuilder queryBuilder;
 
         public EntityView(String name, String idColumn, SQLiteQueryBuilder queryBuilder) {
             this.name = name;
@@ -551,7 +712,7 @@ public abstract class SimpleContentProvider extends ContentProvider {
         public EntityView onEntity(String entityName) {
             Set<String> views = mEntityToViewsMap.get(entityName);
             if (views == null) {
-                views = new HashSet<String>();
+                views = new HashSet<>();
                 mEntityToViewsMap.put(entityName, views);
             }
 

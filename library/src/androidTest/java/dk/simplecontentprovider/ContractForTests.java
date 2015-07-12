@@ -7,8 +7,17 @@ public class ContractForTests {
     public static final String SCHEME = "content://";
     public static final String AUTHORITY = "dk.simplecontentprovider.test";
 
-    public static final class Values implements BaseColumns {
-        protected static final String TABLE_NAME = "test_table";
+    public static final class Items implements BaseColumns {
+        protected static final String TABLE_NAME = "test_items";
+
+        public static final Uri CONTENT_URI = Uri.parse(SCHEME + AUTHORITY + "/" + TABLE_NAME);
+
+        public static final String NAME = "name";
+        public static final String TYPE = "type";
+    }
+
+    public static final class UniqueValues implements BaseColumns {
+        protected static final String TABLE_NAME = "test_values";
 
         public static final Uri CONTENT_URI = Uri.parse(SCHEME + AUTHORITY + "/" + TABLE_NAME);
 
@@ -25,5 +34,4 @@ public class ContractForTests {
         public static final String MIN_VALUE = "min_value";
         public static final String MAX_VALUE = "max_value";
     }
-
 }

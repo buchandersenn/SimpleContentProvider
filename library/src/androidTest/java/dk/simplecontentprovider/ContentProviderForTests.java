@@ -13,15 +13,21 @@ public class ContentProviderForTests extends SimpleContentProvider {
         setDatabaseVersion(1);
 
         // Add entities from the contract...
-        addEntity(ContractForTests.Values.TABLE_NAME)
-                .addColumn(ContractForTests.Values._ID, "INTEGER PRIMARY KEY AUTOINCREMENT")
-                .addColumn(ContractForTests.Values.KEY, "TEXT")
-                .addColumn(ContractForTests.Values.VALUE, "INTEGER")
-                .addConstraint("UNIQUE (" + ContractForTests.Values.KEY + ") ON CONFLICT REPLACE");
+        addEntity(ContractForTests.Items.TABLE_NAME)
+                .addColumn(ContractForTests.Items._ID, "INTEGER PRIMARY KEY")
+                .addColumn(ContractForTests.Items.NAME, "TEXT")
+                .addColumn(ContractForTests.Items.TYPE, "TEXT");
+
+        // Add entities from the contract...
+        addEntity(ContractForTests.UniqueValues.TABLE_NAME)
+                .addColumn(ContractForTests.UniqueValues._ID, "INTEGER PRIMARY KEY AUTOINCREMENT")
+                .addColumn(ContractForTests.UniqueValues.KEY, "TEXT")
+                .addColumn(ContractForTests.UniqueValues.VALUE, "INTEGER")
+                .addConstraint("UNIQUE (" + ContractForTests.UniqueValues.KEY + ") ON CONFLICT REPLACE");
 
         // Optionally add one or more views...
         addView(ContractForTests.View.VIEW_NAME, createQueryBuilderForView())
-                .onEntity(ContractForTests.Values.TABLE_NAME);
+                .onEntity(ContractForTests.UniqueValues.TABLE_NAME);
     }
 
     private SQLiteQueryBuilder createQueryBuilderForView() {
@@ -29,10 +35,10 @@ public class ContentProviderForTests extends SimpleContentProvider {
         SQLiteQueryBuilder builder = new SQLiteQueryBuilder();
 
         String table = "(SELECT " +
-                            "COUNT(" + ContractForTests.Values.KEY + ") AS " + ContractForTests.View.NUMBER_OF_KEYS + "," +
-                            "MIN(" + ContractForTests.Values.VALUE + ") AS " + ContractForTests.View.MIN_VALUE + "," +
-                            "MAX(" + ContractForTests.Values.VALUE + ") AS " + ContractForTests.View.MAX_VALUE + " " +
-                       "FROM " + ContractForTests.Values.TABLE_NAME + ")";
+                            "COUNT(" + ContractForTests.UniqueValues.KEY + ") AS " + ContractForTests.View.NUMBER_OF_KEYS + "," +
+                            "MIN(" + ContractForTests.UniqueValues.VALUE + ") AS " + ContractForTests.View.MIN_VALUE + "," +
+                            "MAX(" + ContractForTests.UniqueValues.VALUE + ") AS " + ContractForTests.View.MAX_VALUE + " " +
+                       "FROM " + ContractForTests.UniqueValues.TABLE_NAME + ")";
         builder.setTables(table);
 
         return builder;

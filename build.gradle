@@ -4,13 +4,13 @@ buildscript {
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:0.14.0'
+        classpath 'com.android.tools.build:gradle:1.2.3'
     }
 }
 
 ext {
-  buildToolsVersion = "21.0.0"
-  minSdkVersion = 14
-  targetSdkVersion = 21
-  compileSdkVersion = 21
+    buildToolsVersion = '22.0.1'
+    minSdkVersion = 14
+    targetSdkVersion = 22
+    compileSdkVersion = 22
 }
